@@ -1,5 +1,5 @@
 # SmartFan
-A smart fan project, controls fan actions according to sensors and user-defined data.
+A smart fan project, controls fan actions according to sensor data and user input.
 
 Board: ESP32   
 Connection: WiFi   
