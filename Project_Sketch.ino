@@ -10,7 +10,7 @@ LiquidCrystal lcd(15,16,17,18,19,21);
 #define BLYNK_AUTH        "iPYKltlmtuP0iVfLA4eZK9n3JCzXNuDm"
 #define WIFI_SSID         "This is Vlag"//"HappyAt"
 #define WIFI_PASS         "kancrpa802333"//"HappyLife58"
-#define LCD_LEN            21
+#define LCD_LEN            16
 
 #define TEMP_PIN        35       //analog input pin constant<br> was 2 and set to 35
 #define ANALOG_FAN_PIN  DAC_CHANNEL_1      //variable to use if using dac functions
@@ -30,10 +30,12 @@ BlynkTimer fanUpdateTimer;
 
 int tempVal;    // temperature sensor raw readings
 float volts;    // variable for storing voltage
-float temp;     // actual temperature variable
+float tempC;     // actual temperature variable
+float tempF;
 int potValue = 0; // variable for storing the potentiometer value
 
 int desiredTemp;
+int fakeTemp;
 int manualFanPower;
 int currentFanPower;
 int previousFanPower;
@@ -45,12 +47,11 @@ int previousState;
 int currentState;
 char line0[LCD_LEN];
 char line1[LCD_LEN];
-std::string valueToPrint;
 
 
 
 
-void fanUpdateEvent() {
+void fanUpdateEvent() {//No.2
   currentFanPower = OFF_VOLTAGE;
 
   //getting new state
@@ -79,6 +80,29 @@ void fanUpdateEvent() {
 
 
       //do temperature voltage calculations here
+      //read desired value first, here uses fakeTemp as a temperature caculated above.
+      if (fakeTemp<=desiredTemp){
+        digitalWrite(DIGITAL_FAN_PIN,LOW);
+      }
+      else if (desiredTemp<fakeTemp<=(desiredTemp+5)){
+        digitalWrite(DIGITAL_FAN_PIN,HIGH);
+        currentFanPower = LOW_VOLTAGE;
+        lcd.setCursor(15,1);
+        lcd.print("L");
+
+      }
+      else if((desiredTemp+5)<fakeTemp<=(desiredTemp+10)){
+        digitalWrite(DIGITAL_FAN_PIN,HIGH);
+        currentFanPower = MEDIUM_VOLTAGE;
+        lcd.setCursor(15,1);
+        lcd.print("M");
+      }
+      else if(fakeTemp>desiredTemp+10){
+        digitalWrite(DIGITAL_FAN_PIN,HIGH);
+        currentFanPower = HIGH_VOLTAGE;
+        lcd.setCursor(15,1);
+        lcd.print("H");
+      }
 
   }
   else if(currentState == MANUAL_STATE){
@@ -92,19 +116,25 @@ void fanUpdateEvent() {
       //lcd.print("System Off");
       //line0[LCD_LEN] = ' ';
       strncpy(line0," ",LCD_LEN);
-      strncpy(line0,"System Off",LCD_LEN);
+      strncpy(line0,"Off",LCD_LEN);
+      updateDisplay();
+      //line0[15] = 'F';
     }
     else if(currentState == AUTO_STATE){
       //lcd.print("System On(AUTO)");
       //line0[LCD_LEN] = ' ';
       strncpy(line0," ",LCD_LEN);
-      strncpy(line0,"System On(AUTO)",LCD_LEN);
+      strncpy(line0,"On(AUTO)",LCD_LEN);
+      updateDisplay();
+      //line0[15] = 'A';
     }
     else if(currentState == MANUAL_STATE){
       //lcd.print("System On(MANUAL)");
       //line0[LCD_LEN] = ' ';
       strncpy(line0," ",LCD_LEN);
-      strncpy(line0,"System On(MANU)",LCD_LEN);
+      strncpy(line0,"On(MANU)",LCD_LEN);
+      updateDisplay();
+      //line0[15] = 'M';
     }
     //lcd.setCursor(0, 1);
     //lcd.print(currentFanPower);
@@ -119,39 +149,66 @@ void fanUpdateEvent() {
 }
 
 //clear screen whenever get update
-void updateDisplay() {
+void updateDisplay() {//No.3
+   //lcd.clear();
    lcd.setCursor(0,0);
    lcd.print(line0);
    //lcd.print(line1); // failed to assine a int value to char[]
+   lcd.setCursor(9,0);
+   lcd.print(tempC);
+   //SYS STATE
+   lcd.setCursor(0,1);
+   if(currentState == OFF_STATE){
+     lcd.print("OFF");
+   }
+   else if(currentState == AUTO_STATE){
+     lcd.print("AUTO");
+   }
+   else if(currentState == MANUAL_STATE){
+     lcd.print("MANUAL");
+   }
+   //FAKE TEMP
+   lcd.setCursor(9,1);
+   lcd.print(fakeTemp);
+   //FAN SPEED
+   lcd.setCursor(15,1);
+   if(currentFanPower == LOW_VOLTAGE){
+     lcd.print("L");
+   }
+   else if(currentFanPower == MEDIUM_VOLTAGE){
+     lcd.print("M");
+   }
+   else if(currentFanPower == HIGH_VOLTAGE){
+     lcd.print("H");
+   }
+   //lcd.print("H");
+   //lcd.print(tempF);
+   //print fake temp
+
 }
 
-void sendSensor(){
+void sendSensor(){ // No.1
   lcd.clear();
   tempVal = analogRead(TEMP_PIN);
-  //valueToPrint = std::to_string(tempVal);
+  volts = tempVal * 3.3/1024;// arduino uses 3.3v
+  tempC = (volts - 0.5) * 100 ; //C with 0.5v offset
+  tempF = (tempC * 9.0 / 5.0) + 32.0;//Fahrenheit
   if(isnan(tempVal)){
     Serial.println("Failed to read from sensor");
     lcd.print("Failed to read sensor data\n");
     return;
   }
-  Serial.print("Current Temperature: ");
-  Serial.println(tempVal);
   line0[LCD_LEN] = ' ';
-  strncpy(line0,"TmpNow",LCD_LEN);
+  strncpy(line0,"TmpNowC",LCD_LEN);
 
-  //strncpy(line1,valueToPrint,LCD_LEN);
-  lcd.setCursor(6,1);
-  lcd.print(tempVal);
-  //lcd.print(tempVal);
 }
 
 void setup() {
   Serial.begin(9600);
-
-  fanUpdateTimer.setInterval(10L,fanUpdateEvent);
   // Setup a function to be called every second
-  fanUpdateTimer.setInterval(1000L, sendSensor);
-  //fanUpdateTimer.setInterval(1000L, updateDisplay);
+  fanUpdateTimer.setInterval(1000L,sendSensor);
+  fanUpdateTimer.setInterval(1000L,fanUpdateEvent);
+  fanUpdateTimer.setInterval(1000L,updateDisplay);
 
   lcd.begin(16,2);
 
@@ -179,7 +236,7 @@ void setup() {
 void loop() {
   Blynk.run();
   fanUpdateTimer.run();
-  updateDisplay();
+
 
 }
 
@@ -234,8 +291,13 @@ BLYNK_WRITE(V2) {
   }
 }
 
-BLYNK_WRITE(V3) {
+BLYNK_WRITE(V5) {
   desiredTemp = param.asInt();
+}
+
+//read fake temp
+BLYNK_WRITE(V6) {
+  fakeTemp = param.asInt();
 }
 
 BLYNK_WRITE(V4){
